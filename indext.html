@@ -1,0 +1,72 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Face Recognition Test</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+</head>
+<body>
+  <h2>Face Recognition ทดสอบระบบ</h2>
+  <input type="file" id="imageUpload" accept="image/*" />
+  <p id="status">กรุณาอัปโหลดภาพ</p>
+
+  <script>
+    async function loadModels() {
+      const modelPath = './admin/models'; // ✅ ตรงกับโฟลเดอร์ของคุณ
+      document.getElementById("status").textContent = "📦 กำลังโหลดโมเดล...";
+      await faceapi.nets.ssdMobilenetv1.loadFromUri(modelPath);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(modelPath);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(modelPath);
+      document.getElementById("status").textContent = "✅ โมเดลโหลดเสร็จแล้ว!";
+    }
+
+    async function handleImageUpload(file) {
+      const img = await faceapi.bufferToImage(file);
+      const detections = await faceapi
+        .detectAllFaces(img)
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+
+      if (!detections.length) {
+        document.getElementById("status").textContent = "❌ ไม่พบใบหน้าในภาพ";
+        return;
+      }
+
+      // แปลง descriptor เป็น array
+      const descriptors = detections.map(det => Array.from(det.descriptor));
+      console.log("📤 ส่ง descriptors:", descriptors);
+
+      document.getElementById("status").textContent = "🔁 กำลังส่งข้อมูลไป backend...";
+
+      const response = await fetch("./admin/backend/includes_backend/verify.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descriptors: descriptors })
+      });
+
+      try {
+        const result = await response.json();
+        console.log("🎯 ผลลัพธ์จาก backend:", result);
+
+        // ตรวจว่ามี match จริงหรือเป็น Unknown
+        if (result.success && result.matches) {
+          const names = result.matches.map((name, index) => `ใบหน้าที่ ${index + 1}: ${name}`);
+          document.getElementById("status").textContent = names.join(" | ");
+        } else {
+          document.getElementById("status").textContent = "❌ ไม่สามารถเปรียบเทียบใบหน้าได้";
+        }
+
+      } catch (err) {
+        console.error("เกิดข้อผิดพลาดในการ parse JSON:", err);
+        document.getElementById("status").textContent = "❌ เกิดข้อผิดพลาดในการเชื่อมต่อ backend";
+      }
+    }
+
+    document.getElementById("imageUpload").addEventListener("change", async (e) => {
+      await loadModels();
+      await handleImageUpload(e.target.files[0]);
+    });
+  </script>
+</body>
+</html>

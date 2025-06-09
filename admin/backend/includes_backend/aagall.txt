@@ -1,0 +1,433 @@
+<!-- ✅ ใช้ CDN Face API -->
+<script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+
+<style>
+    #gallery-preview {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-top: 15px;
+    }
+    .preview-box {
+        width: 160px;
+        height: 200px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        position: relative;
+        transition: all 0.3s ease;
+    }
+    .preview-box:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+    .preview-box img {
+        max-width: 100%;
+        max-height: 140px;
+        object-fit: contain;
+        border-radius: 8px;
+    }
+    .remove-btn {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 24px;
+        text-align: center;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+    .remove-btn:hover {
+        opacity: 1;
+    }
+    .face-count-badge {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        background: #28a745;
+        color: white;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+<?php
+// เปิดการแสดงข้อผิดพลาดเพื่อ debug
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// ตรวจสอบว่ามีการส่งฟอร์มหรือไม่
+if (isset($_POST['create_post'])) {
+    // รับค่าจากฟอร์ม
+    $activity_title = base64_encode($_POST['title']);
+    $activity_title_thai = base64_encode($_POST['title_thai']);
+    $activity_title_china = base64_encode($_POST['title_china']);
+    $activity_subtitle = base64_encode($_POST['subtitle']);
+    $activity_subtitle_thai = base64_encode($_POST['subtitle_thai']);
+    $activity_subtitle_china = base64_encode($_POST['subtitle_china']);
+    $activity_link_url = $_POST['link_url'];
+    $activity_status = $_POST['activity_status'];
+
+    // จัดการไฟล์ภาพหลัก
+    $path = $_FILES['activity_image']['name'];
+    $ext = pathinfo($path, PATHINFO_EXTENSION);
+    $activity_image = uniqid('main_', true) . '.' . $ext;
+    $activity_image_temp = $_FILES['activity_image']['tmp_name'];
+
+    // เนื้อหากิจกรรม
+    $activity_content = base64_encode($_POST['activity_content']);
+    $activity_content_thai = base64_encode($_POST['activity_content_thai']);
+    $activity_content_china = base64_encode($_POST['activity_content_china']);
+    $activity_date = date("Y-m-d H:i:s");
+
+    // ย้ายไฟล์ภาพหลัก
+    if (!move_uploaded_file($activity_image_temp, "../activity/$activity_image")) {
+        die("Failed to upload main image: " . error_get_last()['message']);
+    }
+
+    // เริ่ม session และรับ user_id
+    session_start();
+    $activity_user_id = $_SESSION['user_id'];
+
+    // เพิ่มกิจกรรมหลัก
+    $query = "INSERT INTO tbl_activity(
+        activity_title, activity_title_thai, activity_title_china, 
+        activity_date, activity_image, activity_content, 
+        activity_content_thai, activity_content_china, 
+        activity_status, activity_subtitle, 
+        activity_subtitle_thai, activity_subtitle_china, 
+        activity_link, user_id
+    ) VALUES(
+        '{$activity_title}', '{$activity_title_thai}', '{$activity_title_china}',
+        '{$activity_date}', '{$activity_image}', '{$activity_content}',
+        '{$activity_content_thai}', '{$activity_content_china}',
+        '{$activity_status}', '{$activity_subtitle}',
+        '{$activity_subtitle_thai}', '{$activity_subtitle_china}',
+        '{$activity_link_url}', '$activity_user_id'
+    )";
+    
+    $create_post_query = mysqli_query($connection, $query);
+    if (!$create_post_query) {
+        die("Query Failed: " . mysqli_error($connection));
+    }
+
+    // รับ ID ของกิจกรรมที่เพิ่งสร้าง
+    $the_activity_id = mysqli_insert_id($connection);
+
+    // จัดการ Gallery Images
+    if (!empty($_FILES['activity_gallery']['name'][0])) {
+        // ตรวจสอบและสร้างโฟลเดอร์ถ้าไม่มี
+        $gallery_dir = "../activity_gallery/";
+        if (!file_exists($gallery_dir)) {
+            mkdir($gallery_dir, 0777, true);
+        }
+
+        $gallery_files = $_FILES['activity_gallery'];
+        $total = count($gallery_files['name']);
+
+        for ($i = 0; $i < $total; $i++) {
+            // ตรวจสอบข้อผิดพลาดการอัปโหลด
+            if ($gallery_files['error'][$i] !== UPLOAD_ERR_OK) {
+                error_log("File upload error: " . $gallery_files['error'][$i]);
+                continue;
+            }
+
+            $fileName = $gallery_files['name'][$i];
+            $fileTmp = $gallery_files['tmp_name'][$i];
+            $fileExt = pathinfo($fileName, PATHINFO_EXTENSION);
+            $newFileName = uniqid('gallery_', true) . '.' . $fileExt;
+            $destination = $gallery_dir . $newFileName;
+
+            // ย้ายไฟล์ไปยังโฟลเดอร์
+            if (move_uploaded_file($fileTmp, $destination)) {
+                // ตรวจสอบ face descriptor (ถ้ามี)
+                $faceDescriptor = null;
+                if (!empty($_POST['face_descriptors'][$i])) {
+                    $faceDescriptor = mysqli_real_escape_string($connection, json_encode($_POST['face_descriptors'][$i]));
+                }
+                
+                // ใช้ Prepared Statement เพื่อป้องกัน SQL Injection
+                $stmt = mysqli_prepare($connection, 
+                    "INSERT INTO tbl_activity_gallery 
+                    (activity_id, image_name, face_descriptor) 
+                    VALUES (?, ?, ?)");
+                
+                mysqli_stmt_bind_param($stmt, "iss", $the_activity_id, $newFileName, $faceDescriptor);
+                
+                if (!mysqli_stmt_execute($stmt)) {
+                    error_log("Database error: " . mysqli_error($connection));
+                    // ลบไฟล์ที่อัปโหลดแล้วถ้า insert ล้มเหลว
+                    if (file_exists($destination)) {
+                        unlink($destination);
+                    }
+                }
+                mysqli_stmt_close($stmt);
+            } else {
+                error_log("Failed to move uploaded file: " . $fileName);
+            }
+        }
+    }
+
+    header("Location: activity.php");
+    exit();
+}
+?>
+
+<form action="" method="post" enctype="multipart/form-data" class="row g-3">
+    <!-- ส่วนหัวฟอร์ม -->
+    <div class="form-group col-lg-12">
+        <label for="activity_image" class="d-block ms-3 fw-bold">Activity Image</label>
+        <div>
+            <label for="activity_image" class="upload-icon">
+                <span style="margin-left: 8px;">เลือกไฟล์รูปภาพ</span> 
+                <i class="bi bi-file-image" aria-hidden="true" style="font-size: 1.3rem;"></i>
+            </label>
+            <input type="file" name="activity_image" id="activity_image" style="display: none;" accept="image/*">
+        </div>
+        <div id="preview-container">
+            <img id="preview-image" src="#" alt="Preview Image" class="img-post" style="display: none;">
+        </div>
+    </div>
+
+    <!-- ส่วนข้อมูลทั่วไป -->
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="link">Link Url</label>
+        <input type="text" class="form-control mt-2" name="link_url">
+    </div>
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="activity_status">Activity Status</label>
+        <select class="form-control mt-2" name="activity_status" id="Activity_category">
+            <option value='Draft'>Select Option</option>
+            <option value='Published'>Published</option>
+            <option value='Draft'>Draft</option>
+        </select>
+    </div>
+
+    <!-- ส่วนเนื้อหากิจกรรม (ภาษาอังกฤษ) -->
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="title">Activity Title</label>
+        <input type="text" class="form-control mt-2" name="title" id="personName" placeholder="เช่น Activity_1">
+    </div>
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="subtitle">Activity subtitle</label>
+        <input type="text" class="form-control mt-2" name="subtitle">
+    </div>
+    <div class="form-group col-lg-12">
+        <label class="fw-bold ms-3 mb-3" for="activity_content">Activity Content</label>
+        <textarea id="editor" name="activity_content" class="form-control mt-2">This is some sample content.</textarea>
+    </div>
+
+    <!-- ส่วนเนื้อหากิจกรรม (ภาษาไทย) -->
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="title_thai">[ภาษาไทย] Activity Title</label>
+        <input type="text" class="form-control mt-2" name="title_thai">
+    </div>
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="subtitle_thai">[ภาษาไทย] Activity subtitle</label>
+        <input type="text" class="form-control mt-2" name="subtitle_thai">
+    </div>
+    <div class="form-group col-lg-12">
+        <label class="fw-bold ms-3 mb-3" for="activity_content_thai">[ภาษาไทย] Activity Content</label>
+        <textarea id="editor2" name="activity_content_thai" class="form-control mt-2">นี่คือเนื้อหาตัวอย่างบางส่วน.</textarea>
+    </div>
+
+    <!-- ส่วนเนื้อหากิจกรรม (ภาษาจีน) -->
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="title_china">[ภาษาจีน] Activity Title</label>
+        <input type="text" class="form-control mt-2" name="title_china">
+    </div>
+    <div class="form-group col-lg-6">
+        <label class="fw-bold ms-3" for="subtitle_china">[ภาษาจีน] Activity subtitle</label>
+        <input type="text" class="form-control mt-2" name="subtitle_china">
+    </div>
+    <div class="form-group col-lg-12">
+        <label class="fw-bold ms-3 mb-3" for="activity_content_china">[ภาษาจีน] Activity Content</label>
+        <textarea id="editor3" name="activity_content_china" class="form-control mt-2">这是一些示例内容。</textarea>
+    </div>
+
+    <!-- ส่วน Gallery -->
+    <div class="form-group col-lg-12">
+        <label class="fw-bold ms-3 mb-3" for="activity_gallery">Activity Gallery</label>
+        <input type="file" id="activity_gallery" name="activity_gallery[]" class="form-control mb-3" multiple accept="image/*">
+        <div id="gallery-preview" class="row mt-2"></div>
+    </div>
+
+    <!-- ปุ่ม Submit -->
+    <div class="form-group col-lg-12">
+        <input type="submit" class="btn btn-primary" name="create_post" value="Publish">
+    </div>
+</form>
+
+<!-- JavaScript สำหรับจัดการภาพและ Face API -->
+<script>
+    // ตัวแปรเก็บข้อมูลใบหน้า
+    let pendingDescriptors = [];
+    const uploadedFiles = new Set();
+    let isModelsLoaded = false;
+
+    // Preview ภาพหลัก
+    document.getElementById('activity_image').addEventListener('change', function(event) {
+        const previewImage = document.getElementById('preview-image');
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+                previewImage.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    // โหลดโมเดล Face API
+    async function loadModels() {
+        if (!isModelsLoaded) {
+            try {
+                await faceapi.nets.ssdMobilenetv1.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
+                await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
+                await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
+                isModelsLoaded = true;
+                console.log('Face API models loaded successfully');
+            } catch (error) {
+                console.error('Failed to load Face API models:', error);
+            }
+        }
+    }
+
+    // จัดการเมื่อเลือกไฟล์ Gallery
+    document.getElementById('activity_gallery').addEventListener('change', async function(e) {
+        const preview = document.getElementById('gallery-preview');
+        const files = Array.from(e.target.files);
+        const name = document.getElementById("personName").value.trim();
+
+        if (!name) {
+            alert("⚠️ กรุณากรอกชื่อกิจกรรมก่อนเลือกภาพ");
+            return;
+        }
+
+        await loadModels();
+
+        for (const file of files) {
+            if (uploadedFiles.has(file.name)) {
+                console.warn(`⚠️ ข้าม ${file.name} เพราะเลือกซ้ำแล้ว`);
+                continue;
+            }
+
+            const imageDataUrl = await new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.readAsDataURL(file);
+            });
+
+            const img = new Image();
+            img.src = imageDataUrl;
+            await img.decode();
+
+            try {
+                const detections = await faceapi
+                    .detectAllFaces(img)
+                    .withFaceLandmarks()
+                    .withFaceDescriptors();
+
+                if (!detections.length) {
+                    console.warn(`❌ ไม่พบใบหน้าในภาพ ${file.name}`);
+                    continue;
+                }
+
+                // สร้าง Preview Box
+                const box = document.createElement('div');
+                box.className = 'preview-box';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-btn';
+                removeBtn.innerHTML = '&times;';
+                removeBtn.onclick = () => {
+                    preview.removeChild(box);
+                    pendingDescriptors = pendingDescriptors.filter(d => d.fileName !== file.name);
+                    uploadedFiles.delete(file.name);
+                    updateFaceDescriptorsInput();
+                };
+
+                const faceImg = document.createElement('img');
+                faceImg.src = imageDataUrl;
+                
+                // แสดงจำนวนใบหน้าที่พบ
+                if (detections.length > 1) {
+                    const badge = document.createElement('div');
+                    badge.className = 'face-count-badge';
+                    badge.textContent = detections.length;
+                    box.appendChild(badge);
+                }
+
+                box.appendChild(removeBtn);
+                box.appendChild(faceImg);
+                preview.appendChild(box);
+
+                // เก็บข้อมูลใบหน้า
+                detections.forEach((det, i) => {
+                    pendingDescriptors.push({
+                        fileName: file.name,
+                        descriptor: Array.from(det.descriptor),
+                        personName: name
+                    });
+                });
+
+                uploadedFiles.add(file.name);
+            } catch (error) {
+                console.error(`❌ เกิดข้อผิดพลาดในการประมวลผลภาพ ${file.name}:`, error);
+            }
+        }
+
+        updateFaceDescriptorsInput();
+        e.target.value = '';
+    });
+
+    // อัปเดต Hidden Input สำหรับ Face Descriptors
+    function updateFaceDescriptorsInput() {
+        document.querySelectorAll('input[name^="face_descriptors"]').forEach(el => el.remove());
+        
+        pendingDescriptors.forEach((desc, index) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `face_descriptors[${index}]`;
+            input.value = JSON.stringify(desc);
+            document.querySelector('form').appendChild(input);
+        });
+    }
+
+    // ตรวจสอบก่อนส่งฟอร์ม
+    document.querySelector('form').addEventListener('submit', function(e) {
+        if (pendingDescriptors.length > 0) {
+            console.log('กำลังส่งข้อมูลใบหน้า:', pendingDescriptors);
+        }
+    });
+
+    // ตั้งค่า CKEditor
+    if (typeof CKEDITOR !== 'undefined') {
+        CKEDITOR.dtd.$removeEmpty['i'] = false;
+        CKEDITOR.dtd.$removeEmpty['span'] = false;
+        CKEDITOR.replace('editor', {
+            width: "100%",
+            height: "300px"
+        });
+        CKEDITOR.replace('editor2');
+        CKEDITOR.replace('editor3');
+    }
+</script>

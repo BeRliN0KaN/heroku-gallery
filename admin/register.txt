@@ -1,0 +1,178 @@
+<?php 
+/* Page Header and navigation */
+include "includes_admin/header.php";
+include "includes_admin/navigation.php";
+include '../includes/db.php';
+?>
+
+<br><br>
+
+<?php
+if (isset($_POST['add_user'])) {
+    // ตรวจสอบว่าฟิลด์ที่จำเป็นถูกกรอกหรือไม่
+    if (
+        empty(trim($_POST['username'])) ||
+        empty(trim($_POST['firstname'])) ||
+        empty(trim($_POST['lastname'])) ||
+        empty(trim($_POST['email'])) ||
+        empty($_POST['password']) ||
+        empty($_POST['confirm_password'])
+    ) {
+        echo "<script>
+                alert('กรุณากรอก Username, Firstname, Lastname, Email, Password และ Confirm Password ให้ครบทุกช่อง');
+                window.history.go(-1);
+              </script>";
+        exit;
+    }
+
+    // ตรวจสอบความยาวรหัสผ่านอย่างน้อย 8 ตัวอักษร
+    if (strlen($_POST['password']) < 8) {
+        echo "<script>
+                alert('รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร');
+                window.history.go(-1);
+              </script>";
+        exit;
+    }
+
+    // ตรวจสอบว่า Password กับ Confirm Password ตรงกันหรือไม่
+    if ($_POST['password'] !== $_POST['confirm_password']) {
+        echo "<script>
+                alert('รหัสผ่านไม่ตรงกัน กรุณาตรวจสอบใหม่');
+                window.history.go(-1);
+              </script>";
+        exit;
+    }
+
+    // ถ้า validation ผ่าน จึงดึงค่ามาประมวลผลต่อ
+    $user_firstname = trim($_POST['firstname']);
+    $user_lastname  = trim($_POST['lastname']);
+    $user_name      = trim($_POST['username']);
+    $user_password  = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $user_email     = trim($_POST['email']);
+    $user_role      = $_POST['user_role'];
+
+    // ตรวจสอบว่ามีการอัปโหลดรูปภาพหรือไม่
+    if (!empty($_FILES['user_image']['name'])) {
+        $path            = $_FILES['user_image']['name'];
+        $ext             = pathinfo($path, PATHINFO_EXTENSION);
+        $user_image      = strtotime(date("Y-m-d H:i:s")) . '.' . $ext;
+        $user_image_temp = $_FILES['user_image']['tmp_name'];
+
+        move_uploaded_file($user_image_temp, "./profile/$user_image");
+    } else {
+        // ถ้าไม่มีการอัปโหลดรูป ให้ใช้ค่าเริ่มต้น
+        $user_image = "default.jpg";
+    }
+
+    // Check exist user.
+    $queryExist = "SELECT EXISTS(SELECT 1 FROM tbl_users WHERE user_name = '{$user_name}') AS user";
+    $fetch_data = mysqli_query($connection, $queryExist);
+    $row        = mysqli_fetch_assoc($fetch_data);
+    $user_exists = $row['user'];
+
+    if ($user_exists == 0) {
+        // Add new user.
+        $query  = "INSERT INTO tbl_users(user_firstname, user_lastname, user_name, user_password, user_email, user_image, user_role) ";
+        $query .= "VALUES('{$user_firstname}', '{$user_lastname}', '{$user_name}', '{$user_password}', '{$user_email}', '{$user_image}', '{$user_role}')";
+
+        $create_user_query = mysqli_query($connection, $query);
+        if (!$create_user_query) {
+            die("Query Failed: " . mysqli_error($connection));
+        }
+        header("Location: index.php");
+        exit;
+    } else {
+        echo "<script>
+                alert('This username is already in the system!');
+                window.history.go(-1);
+              </script>";
+        exit;
+    }
+}
+?>
+
+<form action="" method="post" enctype="multipart/form-data" style="max-width: 500px; margin: auto; padding: 2rem; background-color: white; border-radius: 1rem; box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);">
+    <h2 class="text-center fw-bold mb-4" style="color: #002060;">Register</h2>
+
+    <div class="mb-3">
+        <label for="user_image" class="form-label fw-bold">User Image</label>
+        <div>
+            <label for="user_image" style="cursor: pointer; color: #007bff;">
+                เลือกไฟล์รูปภาพ <i class="bi bi-file-image" style="font-size: 1.3rem;"></i>
+            </label>
+            <input type="file" name="user_image" id="user_image" style="display: none;" accept="image/*">
+        </div>
+        <div id="preview-container" class="mt-2">
+            <img id="preview-image" src="#" alt="Preview Image" class="img-fluid" style="max-width: 100px; display: none; border-radius: 0.5rem;">
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('user_image').addEventListener('change', function(event) {
+            const previewImage = document.getElementById('preview-image');
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImage.src = e.target.result;
+                    previewImage.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    </script>
+
+    <style>
+        .form-control::placeholder {
+           color: rgb(160, 160, 160);
+        }
+    </style>
+
+    <div class="mb-3" style="display: none;">
+        <label for="role" class="ms-3 fw-bold">Role</label>
+        <select id="role" class="form-control mt-2" name="user_role">
+            <option value="subscriber" selected>Subscriber</option>
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label for="username" class="form-label fw-bold">Username</label><span class="text-danger">*</span>
+        <input type="text" class="form-control" placeholder="Username" name="username" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="firstname" class="form-label fw-bold">Firstname</label><span class="text-danger">*</span>
+        <input type="text" class="form-control" placeholder="Firstname" name="firstname" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="lastname" class="form-label fw-bold">Lastname</label><span class="text-danger">*</span>
+        <input type="text" class="form-control" placeholder="Lastname" name="lastname" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="email" class="form-label fw-bold">Email</label><span class="text-danger">*</span>
+        <input type="email" class="form-control" placeholder="Email" name="email" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="password" class="form-label fw-bold">Password</label><span class="text-danger">*</span>
+        <!-- เพิ่ม attribute minlength="8" เพื่อบังคับฝั่งผู้ใช้ -->
+        <input type="password" class="form-control" placeholder="Password 8 Characters or Longer" name="password" required minlength="8">
+    </div>
+
+    <div class="mb-3">
+        <label for="confirm_password" class="form-label fw-bold">Confirm Password</label><span class="text-danger">*</span>
+        <!-- เพิ่ม attribute minlength="8" เช่นเดียวกัน -->
+        <input type="password" class="form-control" placeholder="Confirm Password" name="confirm_password" required minlength="8">
+    </div>
+
+    <div class="d-grid mt-4">
+        <button type="submit" class="btn btn-primary" name="add_user">Add User</button>
+    </div>
+</form>
+
+<?php
+/* Page Footer */
+include "includes_admin/footer.php";
+?>
