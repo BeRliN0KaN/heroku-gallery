@@ -6,7 +6,7 @@ include '../includes/db.php';
 ?>
 
 <!-- โหลด Face API สำหรับตรวจสอบใบหน้าในฝั่งไคลเอนต์ -->
-<script defer src="/webGallery/admin/js/face-api.min.js"></script>
+<script defer src="/admin/js/face-api.min.js"></script>
 
 <br><br>
 
@@ -166,8 +166,8 @@ document.getElementById('face_image').addEventListener('change', async e => {
     const file = e.target.files[0];
     const img = document.getElementById('face_preview');
     if (file) {
-        await faceapi.nets.ssdMobilenetv1.loadFromUri('/webGallery/admin/models');
-        await faceapi.nets.faceLandmark68Net.loadFromUri('/webGallery/admin/models');
+        await faceapi.nets.ssdMobilenetv1.loadFromUri('/admin/models');
+        await faceapi.nets.faceLandmark68Net.loadFromUri('/admin/models');
         const bufferImg = await faceapi.bufferToImage(file);
         const detections = await faceapi.detectAllFaces(bufferImg);
         if (detections.length !== 1) {

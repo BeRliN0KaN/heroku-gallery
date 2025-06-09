@@ -46,7 +46,7 @@ $fetch_activity_data = mysqli_query($connection, $query);
     const username = prompt('กรอกชื่อผู้ใช้ที่ต้องการแชร์:');
     if (!username) return;
 
-    $.post('/webGallery/admin/backend/share_activity.php', {
+    $.post('/admin/backend/share_activity.php', {
       activity_id: activityId,
       username: username.trim()
     }, function(response) {

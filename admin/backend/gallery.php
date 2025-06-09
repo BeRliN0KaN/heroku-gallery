@@ -129,15 +129,15 @@ $registeredFace = $usr['user_face_image'];
   </div>
 
   <!-- face-api.js -->
-  <script src="../../../webGallery/admin/js/face-api.min.js"></script>
+  <script src="../../../admin/js/face-api.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const THRESHOLD = 0.35;
 
       Promise.all([
-        faceapi.nets.ssdMobilenetv1.loadFromUri('../../../webGallery/admin/models'),
-        faceapi.nets.faceLandmark68Net.loadFromUri('../../../webGallery/admin/models'),
-        faceapi.nets.faceRecognitionNet.loadFromUri('../../../webGallery/admin/models')
+        faceapi.nets.ssdMobilenetv1.loadFromUri('../../../admin/models'),
+        faceapi.nets.faceLandmark68Net.loadFromUri('../../../admin/models'),
+        faceapi.nets.faceRecognitionNet.loadFromUri('../../../admin/models')
       ]).then(async () => {
         // Prepare registered-face descriptor
         let regDescriptor = null;
